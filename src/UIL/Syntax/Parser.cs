@@ -55,6 +55,12 @@ public sealed class Parser
         if (_position >= _text.Length)
             return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
 
+        if (char.IsWhiteSpace(_text[_position]))
+        {
+            _position++;
+            return ReadToken();
+        }
+
         var start = _position;
         if (char.IsDigit(_text[_position]))
         {
@@ -76,6 +82,10 @@ public sealed class Parser
             {
                 "int" => SyntaxKind.IntKeyword,
                 "return" => SyntaxKind.ReturnKeyword,
+                "class" => SyntaxKind.ClassKeyword,
+                "interface" => SyntaxKind.InterfaceKeyword,
+                "enum" => SyntaxKind.EnumKeyword,
+                "namespace" => SyntaxKind.NamespaceKeyword,
                 _ => SyntaxKind.IdentifierToken
             };
             return new SyntaxToken(kind, start, text, null);
@@ -113,6 +123,18 @@ public sealed class Parser
             case ';':
                 _position++;
                 return new SyntaxToken(SyntaxKind.SemicolonToken, start, ";", null);
+            case '<':
+                _position++;
+                return new SyntaxToken(SyntaxKind.LessThanToken, start, "<", null);
+            case '>':
+                _position++;
+                return new SyntaxToken(SyntaxKind.GreaterThanToken, start, ">", null);
+            case '[':
+                _position++;
+                return new SyntaxToken(SyntaxKind.OpenBracketToken, start, "[", null);
+            case ']':
+                _position++;
+                return new SyntaxToken(SyntaxKind.CloseBracketToken, start, "]", null);
             default:
                 _diagnostics.Report(new DiagnosticInfo(DiagnosticCategory.Syntax, DiagnosticCode.UnexpectedToken, DiagnosticSeverity.Error, $"Bad character '{_text[_position]}'"), new TextLocation("", new TextSpan(_position,1)));
                 _position++;
@@ -131,12 +153,123 @@ public sealed class Parser
     public CompilationUnitSyntax ParseCompilationUnit()
     {
         _position = 0; // reset to beginning of token list
-        var method = ParseMethodDeclaration();
+        var members = new List<MemberDeclarationSyntax>();
+        while (Current.Kind != SyntaxKind.EndOfFileToken)
+            members.Add(ParseMemberDeclaration());
         var eof = MatchToken(SyntaxKind.EndOfFileToken);
-        return new CompilationUnitSyntax(method, eof);
+        return new CompilationUnitSyntax(members, eof);
     }
 
-    private MethodDeclarationSyntax ParseMethodDeclaration()
+    private MemberDeclarationSyntax ParseMemberDeclaration()
+    {
+        var annotations = ParseAnnotations();
+        return Current.Kind switch
+        {
+            SyntaxKind.NamespaceKeyword => ParseNamespaceDeclaration(annotations),
+            SyntaxKind.ClassKeyword => ParseClassDeclaration(annotations),
+            SyntaxKind.InterfaceKeyword => ParseInterfaceDeclaration(annotations),
+            SyntaxKind.EnumKeyword => ParseEnumDeclaration(annotations),
+            SyntaxKind.IntKeyword => ParseMethodDeclaration(annotations),
+            _ => ParseMethodDeclaration(annotations) // fallback
+        };
+    }
+
+    private List<AnnotationSyntax> ParseAnnotations()
+    {
+        var list = new List<AnnotationSyntax>();
+        while (Current.Kind == SyntaxKind.OpenBracketToken)
+            list.Add(ParseAnnotation());
+        return list;
+    }
+
+    private AnnotationSyntax ParseAnnotation()
+    {
+        var open = MatchToken(SyntaxKind.OpenBracketToken);
+        var id = MatchToken(SyntaxKind.IdentifierToken);
+        var close = MatchToken(SyntaxKind.CloseBracketToken);
+        return new AnnotationSyntax(open, id, close);
+    }
+
+    private NamespaceDeclarationSyntax ParseNamespaceDeclaration(IReadOnlyList<AnnotationSyntax> annotations)
+    {
+        var keyword = MatchToken(SyntaxKind.NamespaceKeyword);
+        var id = MatchToken(SyntaxKind.IdentifierToken);
+        var openBrace = MatchToken(SyntaxKind.OpenBraceToken);
+        var members = new List<MemberDeclarationSyntax>();
+        while (Current.Kind != SyntaxKind.CloseBraceToken && Current.Kind != SyntaxKind.EndOfFileToken)
+            members.Add(ParseMemberDeclaration());
+        var closeBrace = MatchToken(SyntaxKind.CloseBraceToken);
+        return new NamespaceDeclarationSyntax(annotations, keyword, id, openBrace, members, closeBrace);
+    }
+
+    private ClassDeclarationSyntax ParseClassDeclaration(IReadOnlyList<AnnotationSyntax> annotations)
+    {
+        var keyword = MatchToken(SyntaxKind.ClassKeyword);
+        var id = MatchToken(SyntaxKind.IdentifierToken);
+        var (less, typeParams, greater) = ParseTypeParameterList();
+        var openBrace = MatchToken(SyntaxKind.OpenBraceToken);
+        var members = new List<MemberDeclarationSyntax>();
+        while (Current.Kind != SyntaxKind.CloseBraceToken && Current.Kind != SyntaxKind.EndOfFileToken)
+            members.Add(ParseMemberDeclaration());
+        var closeBrace = MatchToken(SyntaxKind.CloseBraceToken);
+        return new ClassDeclarationSyntax(annotations, keyword, id, less, typeParams, greater, openBrace, members, closeBrace);
+    }
+
+    private InterfaceDeclarationSyntax ParseInterfaceDeclaration(IReadOnlyList<AnnotationSyntax> annotations)
+    {
+        var keyword = MatchToken(SyntaxKind.InterfaceKeyword);
+        var id = MatchToken(SyntaxKind.IdentifierToken);
+        var (less, typeParams, greater) = ParseTypeParameterList();
+        var openBrace = MatchToken(SyntaxKind.OpenBraceToken);
+        var members = new List<MemberDeclarationSyntax>();
+        while (Current.Kind != SyntaxKind.CloseBraceToken && Current.Kind != SyntaxKind.EndOfFileToken)
+            members.Add(ParseMemberDeclaration());
+        var closeBrace = MatchToken(SyntaxKind.CloseBraceToken);
+        return new InterfaceDeclarationSyntax(annotations, keyword, id, less, typeParams, greater, openBrace, members, closeBrace);
+    }
+
+    private EnumDeclarationSyntax ParseEnumDeclaration(IReadOnlyList<AnnotationSyntax> annotations)
+    {
+        var keyword = MatchToken(SyntaxKind.EnumKeyword);
+        var id = MatchToken(SyntaxKind.IdentifierToken);
+        var openBrace = MatchToken(SyntaxKind.OpenBraceToken);
+        var members = new List<SyntaxToken>();
+        while (Current.Kind != SyntaxKind.CloseBraceToken && Current.Kind != SyntaxKind.EndOfFileToken)
+        {
+            var memberId = MatchToken(SyntaxKind.IdentifierToken);
+            members.Add(memberId);
+            if (Current.Kind == SyntaxKind.CommaToken)
+                NextToken();
+            else
+                break;
+        }
+        var closeBrace = MatchToken(SyntaxKind.CloseBraceToken);
+        return new EnumDeclarationSyntax(annotations, keyword, id, openBrace, members, closeBrace);
+    }
+
+    private (SyntaxToken? lessToken, IReadOnlyList<TypeParameterSyntax> typeParameters, SyntaxToken? greaterToken) ParseTypeParameterList()
+    {
+        SyntaxToken? less = null;
+        var parameters = new List<TypeParameterSyntax>();
+        SyntaxToken? greater = null;
+        if (Current.Kind == SyntaxKind.LessThanToken)
+        {
+            less = NextToken();
+            while (Current.Kind != SyntaxKind.GreaterThanToken && Current.Kind != SyntaxKind.EndOfFileToken)
+            {
+                var id = MatchToken(SyntaxKind.IdentifierToken);
+                parameters.Add(new TypeParameterSyntax(id));
+                if (Current.Kind == SyntaxKind.CommaToken)
+                    NextToken();
+                else
+                    break;
+            }
+            greater = MatchToken(SyntaxKind.GreaterThanToken);
+        }
+        return (less, parameters, greater);
+    }
+
+    private MethodDeclarationSyntax ParseMethodDeclaration(IReadOnlyList<AnnotationSyntax> annotations)
     {
         var type = MatchToken(SyntaxKind.IntKeyword);
         var id = MatchToken(SyntaxKind.IdentifierToken);
@@ -154,7 +287,7 @@ public sealed class Parser
         }
         var closeParen = MatchToken(SyntaxKind.CloseParenToken);
         var body = ParseBlockStatement();
-        return new MethodDeclarationSyntax(type, id, openParen, parameters, closeParen, body);
+        return new MethodDeclarationSyntax(annotations, type, id, openParen, parameters, closeParen, body);
     }
 
     private BlockStatementSyntax ParseBlockStatement()

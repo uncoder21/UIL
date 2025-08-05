@@ -1,3 +1,4 @@
+using System.Linq;
 using UIL.Diagnostics;
 using UIL.Symbols;
 using UIL.Syntax;
@@ -8,6 +9,7 @@ namespace UIL.Binding;
 public sealed class Binder : IBinder
 {
     private readonly Dictionary<string, Symbol> _scope = new();
+    private readonly Dictionary<string, TypeSymbol> _types = new();
     private readonly DiagnosticBag _diagnostics = new();
     private readonly IInstrumentation? _instrumentation;
 
@@ -17,6 +19,45 @@ public sealed class Binder : IBinder
     }
 
     public DiagnosticBag Diagnostics => _diagnostics;
+    public IReadOnlyDictionary<string, TypeSymbol> Types => _types;
+
+    public void BindCompilationUnit(CompilationUnitSyntax syntax)
+    {
+        foreach (var member in syntax.Members)
+            BindMember(member, null);
+    }
+
+    private void BindMember(MemberDeclarationSyntax member, string? currentNamespace)
+    {
+        switch (member)
+        {
+            case NamespaceDeclarationSyntax ns:
+                var nsName = currentNamespace is null ? ns.Identifier.Text : $"{currentNamespace}.{ns.Identifier.Text}";
+                foreach (var m in ns.Members)
+                    BindMember(m, nsName);
+                break;
+            case ClassDeclarationSyntax c:
+                var className = currentNamespace is null ? c.Identifier.Text : $"{currentNamespace}.{c.Identifier.Text}";
+                var typeParams = c.TypeParameters.Select(tp => tp.Identifier.Text).ToList();
+                _types[className] = new TypeSymbol(className, typeParams);
+                foreach (var m in c.Members)
+                    BindMember(m, className);
+                break;
+            case InterfaceDeclarationSyntax i:
+                var interfaceName = currentNamespace is null ? i.Identifier.Text : $"{currentNamespace}.{i.Identifier.Text}";
+                var ifaceParams = i.TypeParameters.Select(tp => tp.Identifier.Text).ToList();
+                _types[interfaceName] = new TypeSymbol(interfaceName, ifaceParams);
+                foreach (var m in i.Members)
+                    BindMember(m, interfaceName);
+                break;
+            case EnumDeclarationSyntax e:
+                var enumName = currentNamespace is null ? e.Identifier.Text : $"{currentNamespace}.{e.Identifier.Text}";
+                _types[enumName] = new TypeSymbol(enumName);
+                break;
+            case MethodDeclarationSyntax:
+                break;
+        }
+    }
 
     public BoundBlockStatement BindMethod(MethodDeclarationSyntax syntax, out MethodSymbol symbol)
     {

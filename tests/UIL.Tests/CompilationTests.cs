@@ -16,7 +16,9 @@ public class CompilationTests
         Assert.False(tree.Diagnostics.Any(), "Parser reported diagnostics: " + string.Join(", ", tree.Diagnostics));
 
         var binder = new Binder();
-        var body = binder.BindMethod(tree.Root.Member, out var method);
+        binder.BindCompilationUnit(tree.Root);
+        var methodSyntax = Assert.IsType<MethodDeclarationSyntax>(tree.Root.Members.Single());
+        var body = binder.BindMethod(methodSyntax, out var method);
         Assert.False(binder.Diagnostics.Any(), "Binder reported diagnostics: " + string.Join(", ", binder.Diagnostics));
 
         BoundBlockStatement optimized = body;

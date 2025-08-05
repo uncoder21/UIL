@@ -17,7 +17,8 @@ if (tree.Diagnostics.Any())
 
 var instrumentation = new ConsoleInstrumentation();
 IBinder binder = new Binder(instrumentation);
-var body = binder.BindMethod(tree.Root.Member, out var method);
+binder.BindCompilationUnit(tree.Root);
+var body = binder.BindMethod((MethodDeclarationSyntax)tree.Root.Members.Single(), out var method);
 if (binder.Diagnostics.Any())
 {
     Console.WriteLine("Bind diagnostics:");
