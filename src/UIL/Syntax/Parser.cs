@@ -53,17 +53,24 @@ public sealed class Parser
         }
 
         var start = _position;
+
         if (char.IsDigit(_text[_position]))
         {
-            if (char.IsWhiteSpace(_text[_position]))
-            {
+            while (_position < _text.Length && char.IsDigit(_text[_position]))
                 _position++;
-                continue;
-            }
 
-            var start = _position;
+            var text = _text.Substring(start, _position - start);
+            int.TryParse(text, out var value);
+            return new SyntaxToken(SyntaxKind.NumberToken, start, text, value);
+        }
 
-            if (char.IsDigit(_text[_position]))
+        if (char.IsLetter(_text[_position]))
+        {
+            while (_position < _text.Length && char.IsLetter(_text[_position]))
+                _position++;
+
+            var text = _text.Substring(start, _position - start);
+            var kind = text switch
             {
                 "int" => SyntaxKind.IntKeyword,
                 "return" => SyntaxKind.ReturnKeyword,
@@ -125,8 +132,6 @@ public sealed class Parser
                 _position++;
                 return new SyntaxToken(SyntaxKind.IdentifierToken, start, _text.Substring(start,1), null);
         }
-
-        return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
     }
 
     private SyntaxToken MatchToken(SyntaxKind kind)
