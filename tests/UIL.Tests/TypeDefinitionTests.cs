@@ -1,7 +1,8 @@
-using System.Linq;
 using UIL.Binding;
 using UIL.Syntax;
 using Xunit;
+
+namespace UIL.Tests;
 
 public class TypeDefinitionTests
 {
