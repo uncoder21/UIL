@@ -4,13 +4,13 @@ namespace UIL.Syntax;
 
 public sealed class CompilationUnitSyntax : SyntaxNode
 {
-    public MethodDeclarationSyntax Member { get; }
+    public IReadOnlyList<MemberDeclarationSyntax> Members { get; }
     public SyntaxToken EndOfFileToken { get; }
 
-    public CompilationUnitSyntax(MethodDeclarationSyntax member, SyntaxToken eof)
-        : base(new TextSpan(member.Span.Start, eof.Span.End - member.Span.Start))
+    public CompilationUnitSyntax(IReadOnlyList<MemberDeclarationSyntax> members, SyntaxToken eof)
+        : base(new TextSpan(members.Count > 0 ? members[0].Span.Start : eof.Span.Start, eof.Span.End - (members.Count > 0 ? members[0].Span.Start : eof.Span.Start)))
     {
-        Member = member;
+        Members = members;
         EndOfFileToken = eof;
     }
 
