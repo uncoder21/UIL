@@ -46,10 +46,15 @@ public sealed class ILEmitter : IEmitter
             case BoundBinaryExpression b:
                 EmitExpression(b.Left, builder);
                 EmitExpression(b.Right, builder);
-                if (b.OperatorKind == Syntax.SyntaxKind.PlusToken)
-                    EmitInstruction(builder, ILOpcode.Add);
-                else
-                    throw new NotSupportedException($"Operator '{b.OperatorKind}' not supported");
+                var opcode = b.OperatorKind switch
+                {
+                    Syntax.SyntaxKind.PlusToken => ILOpcode.Add,
+                    Syntax.SyntaxKind.MinusToken => ILOpcode.Sub,
+                    Syntax.SyntaxKind.StarToken => ILOpcode.Mul,
+                    Syntax.SyntaxKind.SlashToken => ILOpcode.Div,
+                    _ => throw new NotSupportedException($"Operator '{b.OperatorKind}' not supported"),
+                };
+                EmitInstruction(builder, opcode);
                 break;
             default:
                 throw new NotSupportedException($"Expression '{expression.Kind}' not supported");

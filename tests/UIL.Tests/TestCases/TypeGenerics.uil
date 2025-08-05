@@ -1,0 +1,2 @@
+namespace N { class C<T> { } interface I<U> { } enum E { A, B } }
+int M() { return 0; }

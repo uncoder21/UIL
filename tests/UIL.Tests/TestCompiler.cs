@@ -27,7 +27,7 @@ internal static class TestCompiler
             throw new InvalidOperationException("Parser reported diagnostics: " + string.Join(", ", tree.Diagnostics));
 
         var binder = new Binder();
-        var methodSyntax = (MethodDeclarationSyntax)tree.Root.Members.Single();
+        var methodSyntax = tree.Root.Members.OfType<MethodDeclarationSyntax>().Single();
         var body = binder.BindMethod(methodSyntax, out var method);
         if (binder.Diagnostics.Any())
             throw new InvalidOperationException("Binder reported diagnostics: " + string.Join(", ", binder.Diagnostics));
