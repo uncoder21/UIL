@@ -18,5 +18,6 @@
   <ItemGroup>
     <None Include="TestCases\*.uil" CopyToOutputDirectory="PreserveNewest" />
     <None Include="TestCases\*.il" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestCases\*.types" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

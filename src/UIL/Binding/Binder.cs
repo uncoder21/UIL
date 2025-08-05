@@ -22,6 +22,9 @@ public sealed class Binder : IBinder
     public DiagnosticBag Diagnostics => _diagnostics;
     public IReadOnlyDictionary<string, TypeSymbol> Types => _types;
 
+    public bool TryLookupType(string name, out TypeSymbol type)
+        => _types.TryGetValue(name, out type);
+
     public void BindCompilationUnit(CompilationUnitSyntax syntax)
     {
         foreach (var member in syntax.Members)
