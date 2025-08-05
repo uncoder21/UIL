@@ -1,4 +1,3 @@
-using System.Text;
 using UIL.Diagnostics;
 
 namespace UIL.Syntax;
@@ -57,7 +56,8 @@ public sealed class Parser
 
         if (char.IsWhiteSpace(_text[_position]))
         {
-            _position++;
+            while (_position < _text.Length && char.IsWhiteSpace(_text[_position]))
+                _position++;
             return ReadToken();
         }
 
