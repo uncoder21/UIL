@@ -1,0 +1,1 @@
+int AddConst(int a) { return a + 1; }

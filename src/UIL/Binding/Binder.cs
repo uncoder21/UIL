@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UIL.Diagnostics;
 using UIL.Symbols;
@@ -131,21 +132,37 @@ public sealed class Binder : IBinder
 
     private BoundExpression BindBinary(BinaryExpressionSyntax syntax)
     {
-        var left = BindExpression(syntax.Left);
-        var right = BindExpression(syntax.Right);
+        // Flatten left-nested binary expressions to avoid deep recursion
+        var stack = new Stack<(SyntaxKind op, ExpressionSyntax right)>();
+        ExpressionSyntax current = syntax;
 
-        if (left.ConstantValue is { } lConst && right.ConstantValue is { } rConst)
+        while (current is BinaryExpressionSyntax b)
         {
-            if (syntax.OperatorToken.Kind == SyntaxKind.PlusToken)
+            stack.Push((b.OperatorToken.Kind, b.Right));
+            current = b.Left;
+        }
+
+        var left = BindExpression(current);
+
+        while (stack.Count > 0)
+        {
+            var (op, rightSyntax) = stack.Pop();
+            var right = BindExpression(rightSyntax);
+
+            if (left.ConstantValue is { } lConst && right.ConstantValue is { } rConst && op == SyntaxKind.PlusToken)
             {
                 var value = (int)lConst.Value + (int)rConst.Value;
-                var folded = new BoundLiteralExpression(value, TypeSymbol.Int);
-                _instrumentation?.OnNodeBound(folded);
-                return folded;
+                left = new BoundLiteralExpression(value, TypeSymbol.Int);
+                _instrumentation?.OnNodeBound(left);
+            }
+            else
+            {
+                var node = new BoundBinaryExpression(left, op, right, TypeSymbol.Int);
+                _instrumentation?.OnNodeBound(node);
+                left = node;
             }
         }
-        var node = new BoundBinaryExpression(left, syntax.OperatorToken.Kind, right, TypeSymbol.Int);
-        _instrumentation?.OnNodeBound(node);
-        return node;
+
+        return left;
     }
 }
