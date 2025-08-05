@@ -136,12 +136,12 @@ public sealed class Binder : IBinder
     private BoundExpression BindBinary(BinaryExpressionSyntax syntax)
     {
         // Flatten left-nested binary expressions to avoid deep recursion
-        var stack = new Stack<(SyntaxKind op, ExpressionSyntax right)>();
+        var stack = new Stack<(SyntaxToken opToken, ExpressionSyntax right)>();
         ExpressionSyntax current = syntax;
 
         while (current is BinaryExpressionSyntax b)
         {
-            stack.Push((b.OperatorToken.Kind, b.Right));
+            stack.Push((b.OperatorToken, b.Right));
             current = b.Left;
         }
 
@@ -149,21 +149,54 @@ public sealed class Binder : IBinder
 
         while (stack.Count > 0)
         {
-            var (op, rightSyntax) = stack.Pop();
+            var (opToken, rightSyntax) = stack.Pop();
             var right = BindExpression(rightSyntax);
+            var op = opToken.Kind;
 
-            if (left.ConstantValue is { } lConst && right.ConstantValue is { } rConst && op == SyntaxKind.PlusToken)
+            if (left.ConstantValue is { } lConst && right.ConstantValue is { } rConst)
             {
-                var value = (int)lConst.Value + (int)rConst.Value;
-                left = new BoundLiteralExpression(value, TypeSymbol.Int);
-                _instrumentation?.OnNodeBound(left);
+                var lVal = (int)lConst.Value;
+                var rVal = (int)rConst.Value;
+
+                if (op == SyntaxKind.SlashToken && rVal == 0)
+                {
+                    _diagnostics.Report(
+                        new DiagnosticInfo(DiagnosticCategory.Semantic, DiagnosticCode.DivisionByZero, DiagnosticSeverity.Error, "Division by zero"),
+                        new TextLocation("", opToken.Span));
+                    left = new BoundLiteralExpression(0, TypeSymbol.Int);
+                    _instrumentation?.OnNodeBound(left);
+                    continue;
+                }
+
+                int result;
+                var folded = op switch
+                {
+                    SyntaxKind.PlusToken => true,
+                    SyntaxKind.MinusToken => true,
+                    SyntaxKind.StarToken => true,
+                    SyntaxKind.SlashToken => true,
+                    _ => false
+                };
+
+                if (folded)
+                {
+                    result = op switch
+                    {
+                        SyntaxKind.PlusToken => lVal + rVal,
+                        SyntaxKind.MinusToken => lVal - rVal,
+                        SyntaxKind.StarToken => lVal * rVal,
+                        SyntaxKind.SlashToken => lVal / rVal,
+                        _ => 0
+                    };
+                    left = new BoundLiteralExpression(result, TypeSymbol.Int);
+                    _instrumentation?.OnNodeBound(left);
+                    continue;
+                }
             }
-            else
-            {
-                var node = new BoundBinaryExpression(left, op, right, TypeSymbol.Int);
-                _instrumentation?.OnNodeBound(node);
-                left = node;
-            }
+
+            var node = new BoundBinaryExpression(left, op, right, TypeSymbol.Int);
+            _instrumentation?.OnNodeBound(node);
+            left = node;
         }
 
         return left;
