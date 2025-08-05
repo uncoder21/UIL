@@ -15,14 +15,10 @@ public sealed class Parser
         _text = text;
         while (true)
         {
-            var token = NextToken();
-            if (token.Kind != SyntaxKind.EndOfFileToken)
-                _tokens.Add(token);
-            else
-            {
-                _tokens.Add(token);
+            var token = ReadToken();
+            _tokens.Add(token);
+            if (token.Kind == SyntaxKind.EndOfFileToken)
                 break;
-            }
         }
     }
 
@@ -40,11 +36,6 @@ public sealed class Parser
 
     private SyntaxToken NextToken()
     {
-        if (_position >= _tokens.Count)
-        {
-            var token = ReadToken();
-            return token;
-        }
         var current = _tokens[_position];
         _position++;
         return current;
@@ -52,72 +43,81 @@ public sealed class Parser
 
     private SyntaxToken ReadToken()
     {
-        if (_position >= _text.Length)
-            return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
-
-        var start = _position;
-        if (char.IsDigit(_text[_position]))
+        while (_position < _text.Length)
         {
-            while (_position < _text.Length && char.IsDigit(_text[_position]))
-                _position++;
-            var length = _position - start;
-            var text = _text.Substring(start, length);
-            int value = int.Parse(text);
-            return new SyntaxToken(SyntaxKind.NumberToken, start, text, value);
-        }
-
-        if (char.IsLetter(_text[_position]))
-        {
-            while (_position < _text.Length && char.IsLetter(_text[_position]))
-                _position++;
-            var length = _position - start;
-            var text = _text.Substring(start, length);
-            var kind = text switch
+            if (char.IsWhiteSpace(_text[_position]))
             {
-                "int" => SyntaxKind.IntKeyword,
-                "return" => SyntaxKind.ReturnKeyword,
-                _ => SyntaxKind.IdentifierToken
-            };
-            return new SyntaxToken(kind, start, text, null);
+                _position++;
+                continue;
+            }
+
+            var start = _position;
+
+            if (char.IsDigit(_text[_position]))
+            {
+                while (_position < _text.Length && char.IsDigit(_text[_position]))
+                    _position++;
+                var length = _position - start;
+                var text = _text.Substring(start, length);
+                int value = int.Parse(text);
+                return new SyntaxToken(SyntaxKind.NumberToken, start, text, value);
+            }
+
+            if (char.IsLetter(_text[_position]))
+            {
+                while (_position < _text.Length && char.IsLetter(_text[_position]))
+                    _position++;
+                var length = _position - start;
+                var text = _text.Substring(start, length);
+                var kind = text switch
+                {
+                    "int" => SyntaxKind.IntKeyword,
+                    "return" => SyntaxKind.ReturnKeyword,
+                    _ => SyntaxKind.IdentifierToken
+                };
+                return new SyntaxToken(kind, start, text, null);
+            }
+
+            switch (_text[_position])
+            {
+                case '+':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.PlusToken, start, "+", null);
+                case '-':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.MinusToken, start, "-", null);
+                case '*':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.StarToken, start, "*", null);
+                case '/':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.SlashToken, start, "/", null);
+                case '(':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.OpenParenToken, start, "(", null);
+                case ')':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.CloseParenToken, start, ")", null);
+                case '{':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.OpenBraceToken, start, "{", null);
+                case '}':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.CloseBraceToken, start, "}", null);
+                case ',':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.CommaToken, start, ",", null);
+                case ';':
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.SemicolonToken, start, ";", null);
+                default:
+                    _diagnostics.Report(new DiagnosticInfo(DiagnosticCategory.Syntax, DiagnosticCode.UnexpectedToken, DiagnosticSeverity.Error, $"Bad character '{_text[_position]}'"), new TextLocation("", new TextSpan(_position,1)));
+                    _position++;
+                    return new SyntaxToken(SyntaxKind.IdentifierToken, start, _text.Substring(start,1), null);
+            }
         }
 
-        switch (_text[_position])
-        {
-            case '+':
-                _position++;
-                return new SyntaxToken(SyntaxKind.PlusToken, start, "+", null);
-            case '-':
-                _position++;
-                return new SyntaxToken(SyntaxKind.MinusToken, start, "-", null);
-            case '*':
-                _position++;
-                return new SyntaxToken(SyntaxKind.StarToken, start, "*", null);
-            case '/':
-                _position++;
-                return new SyntaxToken(SyntaxKind.SlashToken, start, "/", null);
-            case '(':
-                _position++;
-                return new SyntaxToken(SyntaxKind.OpenParenToken, start, "(", null);
-            case ')':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CloseParenToken, start, ")", null);
-            case '{':
-                _position++;
-                return new SyntaxToken(SyntaxKind.OpenBraceToken, start, "{", null);
-            case '}':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CloseBraceToken, start, "}", null);
-            case ',':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CommaToken, start, ",", null);
-            case ';':
-                _position++;
-                return new SyntaxToken(SyntaxKind.SemicolonToken, start, ";", null);
-            default:
-                _diagnostics.Report(new DiagnosticInfo(DiagnosticCategory.Syntax, DiagnosticCode.UnexpectedToken, DiagnosticSeverity.Error, $"Bad character '{_text[_position]}'"), new TextLocation("", new TextSpan(_position,1)));
-                _position++;
-                return new SyntaxToken(SyntaxKind.IdentifierToken, start, _text.Substring(start,1), null);
-        }
+        return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
     }
 
     private SyntaxToken MatchToken(SyntaxKind kind)
