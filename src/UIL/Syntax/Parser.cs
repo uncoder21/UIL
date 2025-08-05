@@ -2,16 +2,26 @@ using UIL.Diagnostics;
 
 namespace UIL.Syntax;
 
+/// <summary>
+/// A very small recursive descent parser for the UIL language.  The previous
+/// version of this file was heavily corrupted which resulted in numerous
+/// compilation errors and a completely non‑functional lexer.  This
+/// implementation focuses on the minimal set of features exercised by the
+/// tests: namespaces, type declarations, methods and simple expressions.
+/// </summary>
 public sealed class Parser
 {
     private readonly string _text;
     private readonly DiagnosticBag _diagnostics = new();
     private readonly List<SyntaxToken> _tokens = new();
-    private int _position;
+    private int _position; // reused for tokenization and parsing
 
     public Parser(string text)
     {
         _text = text;
+
+        // Tokenize the input immediately so the parser can freely peek ahead
+        // without worrying about the underlying characters.
         while (true)
         {
             var token = ReadToken();
@@ -22,6 +32,93 @@ public sealed class Parser
     }
 
     public DiagnosticBag Diagnostics => _diagnostics;
+
+    // ---------------------------------------------------------------------
+    // Tokenization
+    // ---------------------------------------------------------------------
+
+    private SyntaxToken ReadToken()
+    {
+        if (_position >= _text.Length)
+            return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, string.Empty, null);
+
+        // Skip whitespace
+        if (char.IsWhiteSpace(_text[_position]))
+        {
+            while (_position < _text.Length && char.IsWhiteSpace(_text[_position]))
+                _position++;
+            return ReadToken();
+        }
+
+        var start = _position;
+        var ch = _text[_position];
+
+        // Numbers
+        if (char.IsDigit(ch))
+        {
+            while (_position < _text.Length && char.IsDigit(_text[_position]))
+                _position++;
+            var text = _text.Substring(start, _position - start);
+            int.TryParse(text, out var value);
+            return new SyntaxToken(SyntaxKind.NumberToken, start, text, value);
+        }
+
+        // Identifiers / keywords
+        if (char.IsLetter(ch))
+        {
+            while (_position < _text.Length && char.IsLetter(_text[_position]))
+                _position++;
+            var text = _text.Substring(start, _position - start);
+            var kind = text switch
+            {
+                "int" => SyntaxKind.IntKeyword,
+                "return" => SyntaxKind.ReturnKeyword,
+                "class" => SyntaxKind.ClassKeyword,
+                "interface" => SyntaxKind.InterfaceKeyword,
+                "enum" => SyntaxKind.EnumKeyword,
+                "namespace" => SyntaxKind.NamespaceKeyword,
+                _ => SyntaxKind.IdentifierToken
+            };
+            return new SyntaxToken(kind, start, text, null);
+        }
+
+        _position++;
+        return ch switch
+        {
+            '+' => new SyntaxToken(SyntaxKind.PlusToken, start, "+", null),
+            '-' => new SyntaxToken(SyntaxKind.MinusToken, start, "-", null),
+            '*' => new SyntaxToken(SyntaxKind.StarToken, start, "*", null),
+            '/' => new SyntaxToken(SyntaxKind.SlashToken, start, "/", null),
+            '(' => new SyntaxToken(SyntaxKind.OpenParenToken, start, "(", null),
+            ')' => new SyntaxToken(SyntaxKind.CloseParenToken, start, ")", null),
+            '{' => new SyntaxToken(SyntaxKind.OpenBraceToken, start, "{", null),
+            '}' => new SyntaxToken(SyntaxKind.CloseBraceToken, start, "}", null),
+            ',' => new SyntaxToken(SyntaxKind.CommaToken, start, ",", null),
+            ';' => new SyntaxToken(SyntaxKind.SemicolonToken, start, ";", null),
+            '<' => new SyntaxToken(SyntaxKind.LessThanToken, start, "<", null),
+            '>' => new SyntaxToken(SyntaxKind.GreaterThanToken, start, ">", null),
+            '[' => new SyntaxToken(SyntaxKind.OpenBracketToken, start, "[", null),
+            ']' => new SyntaxToken(SyntaxKind.CloseBracketToken, start, "]", null),
+            _ => ReportBadCharacter(start, ch)
+        };
+    }
+
+    private SyntaxToken ReportBadCharacter(int position, char ch)
+    {
+        _diagnostics.Report(
+            new DiagnosticInfo(
+                DiagnosticCategory.Syntax,
+                DiagnosticCode.UnexpectedToken,
+                DiagnosticSeverity.Error,
+                $"Bad character '{ch}'"),
+            new TextLocation(string.Empty, new TextSpan(position, 1)));
+
+        return new SyntaxToken(SyntaxKind.IdentifierToken, position, ch.ToString(), null);
+    }
+
+    // ---------------------------------------------------------------------
+    // Helpers for parsing
+    // ---------------------------------------------------------------------
 
     private SyntaxToken Peek(int offset)
     {
@@ -40,106 +137,29 @@ public sealed class Parser
         return current;
     }
 
-    private SyntaxToken ReadToken()
-    {
-        if (_position >= _text.Length)
-            return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
-
-        if (char.IsWhiteSpace(_text[_position]))
-        {
-            while (_position < _text.Length && char.IsWhiteSpace(_text[_position]))
-                _position++;
-            return ReadToken();
-        }
-
-        var start = _position;
-        if (char.IsDigit(_text[_position]))
-        {
-            if (char.IsWhiteSpace(_text[_position]))
-            {
-                _position++;
-                continue;
-            }
-
-            var start = _position;
-
-            if (char.IsDigit(_text[_position]))
-            {
-                "int" => SyntaxKind.IntKeyword,
-                "return" => SyntaxKind.ReturnKeyword,
-                "class" => SyntaxKind.ClassKeyword,
-                "interface" => SyntaxKind.InterfaceKeyword,
-                "enum" => SyntaxKind.EnumKeyword,
-                "namespace" => SyntaxKind.NamespaceKeyword,
-                _ => SyntaxKind.IdentifierToken
-            };
-            return new SyntaxToken(kind, start, text, null);
-        }
-
-        switch (_text[_position])
-        {
-            case '+':
-                _position++;
-                return new SyntaxToken(SyntaxKind.PlusToken, start, "+", null);
-            case '-':
-                _position++;
-                return new SyntaxToken(SyntaxKind.MinusToken, start, "-", null);
-            case '*':
-                _position++;
-                return new SyntaxToken(SyntaxKind.StarToken, start, "*", null);
-            case '/':
-                _position++;
-                return new SyntaxToken(SyntaxKind.SlashToken, start, "/", null);
-            case '(':
-                _position++;
-                return new SyntaxToken(SyntaxKind.OpenParenToken, start, "(", null);
-            case ')':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CloseParenToken, start, ")", null);
-            case '{':
-                _position++;
-                return new SyntaxToken(SyntaxKind.OpenBraceToken, start, "{", null);
-            case '}':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CloseBraceToken, start, "}", null);
-            case ',':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CommaToken, start, ",", null);
-            case ';':
-                _position++;
-                return new SyntaxToken(SyntaxKind.SemicolonToken, start, ";", null);
-            case '<':
-                _position++;
-                return new SyntaxToken(SyntaxKind.LessThanToken, start, "<", null);
-            case '>':
-                _position++;
-                return new SyntaxToken(SyntaxKind.GreaterThanToken, start, ">", null);
-            case '[':
-                _position++;
-                return new SyntaxToken(SyntaxKind.OpenBracketToken, start, "[", null);
-            case ']':
-                _position++;
-                return new SyntaxToken(SyntaxKind.CloseBracketToken, start, "]", null);
-            default:
-                _diagnostics.Report(new DiagnosticInfo(DiagnosticCategory.Syntax, DiagnosticCode.UnexpectedToken, DiagnosticSeverity.Error, $"Bad character '{_text[_position]}'"), new TextLocation("", new TextSpan(_position,1)));
-                _position++;
-                return new SyntaxToken(SyntaxKind.IdentifierToken, start, _text.Substring(start,1), null);
-        }
-
-        return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
-    }
-
     private SyntaxToken MatchToken(SyntaxKind kind)
     {
         if (Current.Kind == kind)
             return NextToken();
-        _diagnostics.Report(new DiagnosticInfo(DiagnosticCategory.Syntax, DiagnosticCode.UnexpectedToken, DiagnosticSeverity.Error, $"Expected {kind}, found {Current.Kind}"), new TextLocation("", Current.Span));
+
+        _diagnostics.Report(
+            new DiagnosticInfo(
+                DiagnosticCategory.Syntax,
+                DiagnosticCode.UnexpectedToken,
+                DiagnosticSeverity.Error,
+                $"Expected {kind}, found {Current.Kind}"),
+            new TextLocation(string.Empty, Current.Span));
         return new SyntaxToken(kind, Current.Span.Start, string.Empty, null);
     }
 
+    // ---------------------------------------------------------------------
+    // Parsing
+    // ---------------------------------------------------------------------
+
     public CompilationUnitSyntax ParseCompilationUnit()
     {
-        _position = 0; // reset to beginning of token list
+        // After tokenization, reset position to start consuming tokens
+        _position = 0;
         var members = new List<MemberDeclarationSyntax>();
         while (Current.Kind != SyntaxKind.EndOfFileToken)
             members.Add(ParseMemberDeclaration());
@@ -157,7 +177,7 @@ public sealed class Parser
             SyntaxKind.InterfaceKeyword => ParseInterfaceDeclaration(annotations),
             SyntaxKind.EnumKeyword => ParseEnumDeclaration(annotations),
             SyntaxKind.IntKeyword => ParseMethodDeclaration(annotations),
-            _ => ParseMethodDeclaration(annotations) // fallback
+            _ => ParseMethodDeclaration(annotations) // fallback to allow error recovery
         };
     }
 
@@ -239,6 +259,7 @@ public sealed class Parser
         SyntaxToken? less = null;
         var parameters = new List<TypeParameterSyntax>();
         SyntaxToken? greater = null;
+
         if (Current.Kind == SyntaxKind.LessThanToken)
         {
             less = NextToken();
@@ -253,6 +274,7 @@ public sealed class Parser
             }
             greater = MatchToken(SyntaxKind.GreaterThanToken);
         }
+
         return (less, parameters, greater);
     }
 
@@ -288,13 +310,11 @@ public sealed class Parser
     }
 
     private StatementSyntax ParseStatement()
-    {
-        return Current.Kind switch
+        => Current.Kind switch
         {
             SyntaxKind.ReturnKeyword => ParseReturnStatement(),
-            _ => ParseReturnStatement() // fallback
+            _ => ParseReturnStatement() // simple fallback
         };
-    }
 
     private ReturnStatementSyntax ParseReturnStatement()
     {
@@ -328,20 +348,19 @@ public sealed class Parser
         };
 
     private ExpressionSyntax ParsePrimaryExpression()
-    {
-        return Current.Kind switch
+        => Current.Kind switch
         {
             SyntaxKind.OpenParenToken => ParseParenthesizedExpression(),
             SyntaxKind.IdentifierToken => new IdentifierNameSyntax(NextToken()),
-            _ => new LiteralExpressionSyntax(MatchToken(SyntaxKind.NumberToken)),
+            _ => new LiteralExpressionSyntax(MatchToken(SyntaxKind.NumberToken))
         };
-    }
 
     private ExpressionSyntax ParseParenthesizedExpression()
     {
-        var open = MatchToken(SyntaxKind.OpenParenToken);
+        MatchToken(SyntaxKind.OpenParenToken);
         var expression = ParseExpression();
-        var close = MatchToken(SyntaxKind.CloseParenToken);
+        MatchToken(SyntaxKind.CloseParenToken);
         return expression;
     }
 }
+
