@@ -14,14 +14,10 @@ public sealed class Parser
         _text = text;
         while (true)
         {
-            var token = NextToken();
-            if (token.Kind != SyntaxKind.EndOfFileToken)
-                _tokens.Add(token);
-            else
-            {
-                _tokens.Add(token);
+            var token = ReadToken();
+            _tokens.Add(token);
+            if (token.Kind == SyntaxKind.EndOfFileToken)
                 break;
-            }
         }
     }
 
@@ -39,11 +35,6 @@ public sealed class Parser
 
     private SyntaxToken NextToken()
     {
-        if (_position >= _tokens.Count)
-        {
-            var token = ReadToken();
-            return token;
-        }
         var current = _tokens[_position];
         _position++;
         return current;
@@ -64,21 +55,15 @@ public sealed class Parser
         var start = _position;
         if (char.IsDigit(_text[_position]))
         {
-            while (_position < _text.Length && char.IsDigit(_text[_position]))
+            if (char.IsWhiteSpace(_text[_position]))
+            {
                 _position++;
-            var length = _position - start;
-            var text = _text.Substring(start, length);
-            int value = int.Parse(text);
-            return new SyntaxToken(SyntaxKind.NumberToken, start, text, value);
-        }
+                continue;
+            }
 
-        if (char.IsLetter(_text[_position]))
-        {
-            while (_position < _text.Length && char.IsLetter(_text[_position]))
-                _position++;
-            var length = _position - start;
-            var text = _text.Substring(start, length);
-            var kind = text switch
+            var start = _position;
+
+            if (char.IsDigit(_text[_position]))
             {
                 "int" => SyntaxKind.IntKeyword,
                 "return" => SyntaxKind.ReturnKeyword,
@@ -140,6 +125,8 @@ public sealed class Parser
                 _position++;
                 return new SyntaxToken(SyntaxKind.IdentifierToken, start, _text.Substring(start,1), null);
         }
+
+        return new SyntaxToken(SyntaxKind.EndOfFileToken, _position, "", null);
     }
 
     private SyntaxToken MatchToken(SyntaxKind kind)

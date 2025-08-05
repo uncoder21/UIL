@@ -15,4 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/UIL/UIL.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="TestCases\*.uil" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestCases\*.il" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
